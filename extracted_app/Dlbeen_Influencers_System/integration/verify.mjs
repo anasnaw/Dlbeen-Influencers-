@@ -1,0 +1,33 @@
+import fs from 'node:fs/promises';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+const modelSource=await fs.readFile('lib/model.ts','utf8');
+const modelJS=ts.transpileModule(modelSource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+await fs.mkdir('.sites-runtime/qa',{recursive:true});await fs.writeFile('.sites-runtime/qa/model.mjs',modelJS);
+const {progress,summarize,validateRow,demoData}=await import('../.sites-runtime/qa/model.mjs');
+const agreement={id:'a',influencer_id:'i',month:'2026-09',brand:'DS Labs',stories:1,reels:1,posts:0,fee:100,currency:'IQD',renewal:'Maybe',due_date:'2026-09-30'};
+const contents=[{id:'c1',agreement_id:'a',format:'Story',status:'Published',reach:100,likes:5,comments:1,shares:2,saves:2,followers_gained:3},{id:'c2',agreement_id:'a',format:'Story',status:'Published',reach:100,likes:5,comments:1,shares:2,saves:2,followers_gained:4}];
+assert.equal(progress(agreement,contents).remaining,1);assert.equal(progress(agreement,contents).percent,50);
+const filter={month:'2026-09',brand:'all',influencer:'all',currency:'IQD'};const fixture={influencers:[{id:'i',name:'QA only',platform:'Instagram'}],agreements:[agreement,{...agreement,id:'usd',currency:'USD',fee:500},{...agreement,id:'oct',month:'2026-10',fee:400}],content:contents};
+let result=summarize(fixture,filter);assert.equal(result.fee,100);assert.equal(result.er,10);assert.equal(result.followers,7);assert.equal(result.remaining,1);
+result=summarize({...fixture,content:[{...contents[0],comments:''},contents[1]]},filter);assert.equal(result.coverage,1);assert.equal(result.er,10);
+assert.throws(()=>validateRow('content',{id:'x',agreement_id:'a',title:'QA',format:'Reel',status:'Published'},fixture));
+assert.throws(()=>validateRow('influencers',{id:'x',name:'QA',platform:'Instagram',followers:-1}));
+const code=await fs.readFile('public/integration/Code.gs','utf8');new vm.Script(code);assert.ok(!code.includes('__SPREADSHEET_ID__'));assert.ok(code.includes('1grmRqJxJlSNv8fo01giN8X7NurMiAOhmSiRQlj_6AOc'));
+// Exercise the same browser export code, with only the download DOM and font read mocked.
+const exportSource=(await fs.readFile('lib/export-report.ts','utf8')).replace("from './model'","from './model.mjs'");
+const exportJS=ts.transpileModule(exportSource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+await fs.writeFile('.sites-runtime/qa/export.mjs',exportJS);
+const outputDir=new URL('../.sites-runtime/qa/output/',import.meta.url);await fs.mkdir(outputDir,{recursive:true});
+const saved=[];let blobMap=new Map();const create=URL.createObjectURL;URL.createObjectURL=b=>{const url=create(b);blobMap.set(url,b);return url};
+const a={href:'',download:'',click(){saved.push({name:this.download,blob:blobMap.get(this.href)})},remove(){}};
+globalThis.document={createElement:()=>a,body:{appendChild:()=>{}}};
+globalThis.fetch=async()=>new Response(await fs.readFile('public/fonts/DejaVuSans.ttf'));
+const {exportReport}=await import('../.sites-runtime/qa/export.mjs');
+const sample=demoData('2026-09');await exportReport(sample,filter,'Export verification: fictional data only.','xlsx',true);
+assert.equal(saved.length,1);assert.ok(saved[0].blob.size>5000);await fs.writeFile(new URL(saved[0].name,outputDir),new Uint8Array(await saved[0].blob.arrayBuffer()));
+// jsPDF saves through its Node adapter when running in this verification process.
+await exportReport(sample,filter,'Export verification: fictional data only.','pdf',true);
+await fs.rename('SAMPLE_Dlbeen_Influencers_2026-09_IQD.pdf',new URL('SAMPLE_Dlbeen_Influencers_2026-09_IQD.pdf',outputDir));
+console.log('PASS: per-format commitments; month/currency isolation; missing-metric ER; input validation; script syntax; PDF and XLSX generation.');

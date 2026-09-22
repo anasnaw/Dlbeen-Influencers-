@@ -1,0 +1,2 @@
+import {guard,driveCall,jsonError} from '@/lib/drive-server';
+export async function GET(req:Request){try{await guard();const id=new URL(req.url).searchParams.get('id');if(!id||!/^[a-zA-Z0-9_-]+$/.test(id))throw new Error('Invalid photo.');const image=await driveCall({action:'image',id});return new Response(Uint8Array.from(atob(image.base64),c=>c.charCodeAt(0)),{headers:{'Content-Type':image.mime,'Cache-Control':'private, max-age=1800','X-Content-Type-Options':'nosniff'}});}catch(e){return jsonError(e,404);}}

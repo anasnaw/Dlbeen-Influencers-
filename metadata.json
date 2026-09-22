@@ -1,0 +1,8 @@
+{
+  "name": "Dlbeen Influencers System",
+  "description": "A private, branded workspace for Dlbeen Group influencer profiles, monthly content commitments, publishing progress, campaign results, renewal decisions, Google Drive synchronization, and PDF / Excel reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
